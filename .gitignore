@@ -1,0 +1,7 @@
+__pycache__
+*.swp
+*.iml
+.idea/
+*.fwsbak
+ipython_log*
+venv/

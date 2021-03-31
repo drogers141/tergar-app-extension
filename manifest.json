@@ -1,0 +1,52 @@
+{
+
+  "manifest_version": 2,
+  "name": "General Firefox Extension",
+  "version": "1.0",
+
+  "description": "To play around with",
+  "homepage_url": "https://www.drogers.us",
+  "icons": {
+    "32": "icons/dr-icon-32.png",
+    "48": "icons/dr-icon-48.png"
+  },
+
+  "permissions": [
+    "activeTab",
+    "storage",
+    "tabs",
+    "downloads",
+    "webRequest",
+    "<all_urls>",
+    "webRequestBlocking"
+  ],
+
+  "background": {
+    "scripts": [
+      "background.js",
+      "assets/js/moment.js"
+    ]
+  },
+
+  "content_scripts": [
+    {
+      "matches": ["https://app.tergar.org/*"],
+      "js": [
+        "assets/js/jquery-3.4.1.js",
+        "assets/js/moment.js",
+        "content_scripts/tergar_meditation_app.js"
+      ]
+    }
+  ],
+
+  "browser_action": {
+    "default_icon": "icons/dr-icon-32.png",
+    "default_title": "DR General Ext.",
+    "default_popup": "popup/button.html"
+  },
+
+  "web_accessible_resources": [
+  ]
+
+}
+
