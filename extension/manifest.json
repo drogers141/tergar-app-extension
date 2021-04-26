@@ -1,10 +1,10 @@
 {
 
   "manifest_version": 2,
-  "name": "General Firefox Extension",
-  "version": "1.0",
+  "name": "Tergar App Extension",
+  "version": "0.1.0",
 
-  "description": "To play around with",
+  "description": "Add functionality to the Tergar meditation app",
   "homepage_url": "https://www.drogers.us",
   "icons": {
     "32": "icons/dr-icon-32.png",
@@ -41,12 +41,18 @@
 
   "browser_action": {
     "default_icon": "icons/dr-icon-32.png",
-    "default_title": "DR General Ext.",
+    "default_title": "Tergar App Ext",
     "default_popup": "popup/button.html"
   },
 
   "web_accessible_resources": [
-  ]
+  ],
 
+  "applications": {
+    "gecko": {
+      "id": "tergar_app_ext@example.org",
+      "strict_min_version": "50.0"
+    }
+  }
 }
 
