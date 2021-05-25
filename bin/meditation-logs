@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# script to invoke meditation_logs.py using the python virtual environment
+
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd -P )"
+
+$SCRIPT_DIR/../venv/bin/python  $SCRIPT_DIR/../meditation_logs.py "$@"
+
