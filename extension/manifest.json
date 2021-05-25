@@ -2,7 +2,7 @@
 
   "manifest_version": 2,
   "name": "Tergar App Extension",
-  "version": "0.1.0",
+  "version": "0.1.2",
 
   "description": "Add functionality to the Tergar meditation app",
   "homepage_url": "https://www.drogers.us",
@@ -51,7 +51,7 @@
   "applications": {
     "gecko": {
       "id": "tergar_app_ext@example.org",
-      "strict_min_version": "50.0"
+      "strict_min_version": "57.0"
     }
   }
 }
