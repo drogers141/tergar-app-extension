@@ -168,7 +168,7 @@ class MeditationLogs:
         return "\n".join((header, overall, weeks_header, weeks))
 
     def jol3_table(self):
-        title = "Joy of Living 3    (add 20-30 hours before tracking with app)"
+        title = "Joy of Living 3    (add 20-30 hours before tracking)"
         headers = ["Week", "Sessions", "Total Time"]
         table = self.jol3_by_week_totals()
         table.append(("Total", len(self.buckets["jol3"]),
@@ -309,6 +309,7 @@ def main():
         print(", ".join(ml.buckets.keys()))
         exit(0)
 
+    print("Started tracking: May 5, 2019\n")
     print(ml.jol3_table() + "\n")
     print(ml.bardo_courses_table() + "\n")
     print(ml.fully_being_table() + "\n")
