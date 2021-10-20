@@ -12,11 +12,14 @@ Contact me if you like:
 Dave Rogers
 dave@drogers.us
 """
+import datetime
 import json
 import os
 import glob
 import re
 import argparse
+import shutil
+
 from tabulate import tabulate
 
 # default download directory for your system - the json file downloaded by the extension will go in this dir
@@ -25,9 +28,16 @@ DOWNLOAD_DIR = os.path.expanduser("~/Downloads")
 # directory where the json files will be stored
 TERGAR_DATA_DIR = os.path.expanduser("~/Dropbox/data/tergar")
 
+# backup meditation logs file if the last backup is older than this many days
+BACKUP_AFTER_NUM_DAYS = 30
+
 
 def stored_meditation_log_files():
     return glob.glob(os.path.join(TERGAR_DATA_DIR, "tergar-meditation-logs-20*.json"))
+
+
+def backed_up_log_files():
+    return glob.glob(os.path.join(TERGAR_DATA_DIR, "tergar-meditation-logs-backup-*"))
 
 
 def move_downloaded_log_files_to_storage():
@@ -85,7 +95,6 @@ class MeditationLogs:
         self.buckets["adl"] = [e for e in self.all_entries if e.get("notes") and "ADL" in e["notes"]]
         # Dying and Awakening Course - DOA nickname
         self.buckets["doa"] = [e for e in self.all_entries if e.get("notes") and "DOA" in e["notes"]]
-
         # Nectar of the Path
         self.buckets["nop"] = [e for e in self.all_entries if e["course"]["code"] == "NECTAR_PATH"]
         # Tsoknyi Rinpoche - Fully Being
@@ -96,7 +105,7 @@ class MeditationLogs:
                         "subtle body", "calm abiding", "insight", "qualities"):
             self.buckets["fb-sections"][section] = [e for e in self.buckets["fully-being"]
                                                     if re.search(section, e["notes"].replace('\n', ' '), re.I)]
-        # not in any course
+
         _custom_course_combined = (self.buckets["ded"] + self.buckets["adl"] + self.buckets["doa"]
                                    + self.buckets["nop"] + self.buckets["fully-being"])
         self.buckets["not-any-course"] = [entry for entry in self.all_entries
@@ -175,22 +184,6 @@ class MeditationLogs:
                       format_time(MeditationLogs.total_duration_seconds(self.buckets["jol3"]))))
         return f"{title}\n\n{tabulate(table, headers=headers, tablefmt='presto', colalign=('left', 'right', 'right'))}"
 
-    def overall_stats_string(self):
-        header = "Overall Meditation"
-        overall = "Total sessions: {}, Total Time: {}".format(
-            len(self.all_entries),
-            format_time(MeditationLogs.total_duration_seconds(self.all_entries)))
-        return "\n".join([header, overall])
-
-    def other_bucketed_entries_stats_string(self, header, bucket):
-        overall = "Total sessions: {}, Total Time: {}".format(
-            len(bucket),
-            format_time(MeditationLogs.total_duration_seconds(bucket)))
-        return "\n".join([header, overall])
-
-    def nop_stats_string(self):
-        return self.other_bucketed_entries_stats_string(header="NOP Meditation", bucket=self.buckets["nop"])
-
     def _number_of_sessions_and_duration(self, bucket_name):
         return (len(self.buckets[bucket_name]),
                 format_time(MeditationLogs.total_duration_seconds(self.buckets[bucket_name])))
@@ -210,6 +203,8 @@ class MeditationLogs:
                  ]
 
         return f"{title}\n\n{tabulate(table, headers=headers, tablefmt='presto', colalign=('left', 'right', 'right'))}"
+
+
 
     def general_table(self):
         """General stats, also NOP"""
@@ -255,6 +250,27 @@ def latest_log():
         return sorted(log_files)[-1]
 
 
+def datetime_from_filename(filename):
+    """Returns datetime with no tz"""
+    datetime_str = re.search(r'(\d{4}.*)-\d\d\.\d\d.json', filename).groups()[0]
+    return datetime.datetime.strptime(datetime_str, '%Y-%m-%dT%H.%M.%S')
+
+
+def backup_logs():
+    """Backup logs every month.
+
+    Later we can add logic to check backups and remove them as necessary.
+    :raise IndexError if there are no existing backups
+    """
+    latest_backup = sorted(backed_up_log_files())[-1]
+    latest_backup_date = datetime_from_filename(latest_backup)
+    if datetime.datetime.now() - latest_backup_date >= datetime.timedelta(days=BACKUP_AFTER_NUM_DAYS):
+        backup_filename = latest_log().replace('tergar-meditation-logs', 'tergar-meditation-logs-backup')
+        shutil.copy(latest_log(), backup_filename)
+        print(f"last backup older than {BACKUP_AFTER_NUM_DAYS} days, backing up:")
+        print(f"{latest_log()} ->\n{backup_filename}\n")
+
+
 def main():
 
     parser = argparse.ArgumentParser()
@@ -273,6 +289,7 @@ def main():
         print("No downloaded logs in ~/Downloads")
         exit(0)
     clean_up_old_files()
+    backup_logs()
     print("meditation log file: {}\n".format(log_file))
 
     ml = MeditationLogs(log_file)

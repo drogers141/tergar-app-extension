@@ -1,3 +1,8 @@
+/**
+ * This script pulls the meditation logs from local storage used by Redux.
+ * It stores them and passes a message to the background script to download.
+ */
+
 (function () {
     /**
      * Check and set a global guard variable.
@@ -9,62 +14,6 @@
     }
     window.hasRun = true;
     window.URL = window.URL || window.webkitURL;
-
-    /*
-    div #blurNotes covers the Practice Notes
-    which includes title, quote from Mingyur Rinpoche
-    and the individual log entry notes
-
-    each log entry has text an metadata under div with
-    data-id="int string I think"
-
-    $("#blurNotes .col-xs-12.col-sm-5.col-md-4").find("div[data-id]").length
-122
-$("#blurNotes .col-xs-12.col-sm-5.col-md-4").find("div[data-id]").first().children().map((i, e) => { return e.textContent; })
-     */
-
-    function handleMeditationEntry(node) {
-        let childrenText = node.children().map((i, e) => { return e.textContent; })
-        // let [text, ]
-    }
-    /**
-     * Implement this function to interact with the page.
-     * See scrapeStoreAndNotifyBackend()
-     * Returns object that works with local storage.
-     */
-    function pageScrapeFunction() {
-        // return {"title": "tergar meditation app data"};
-        let entryLogNodes = $("#blurNotes .col-xs-12.col-sm-5.col-md-4").find("div[data-id]");
-
-    }
-
-    /**
-     * Storage key.
-     *
-     * @type {string}
-     */
-    const STORAGE_KEY = "tergar_meditation_app";
-
-    /**
-     * Filename to download to.
-     *
-     * @type {string}
-     */
-    const FILENAME = "tergar_meditation_app_scrape.json";
-
-    const JS_FILENAME = "tergar_meditation_app.js";
-
-
-    /********************************************************
-     *   Shouldn't need to change this code
-     ********************************************************/
-
-    /**
-     * Use this function for error callbacks if you like.
-     *
-     * @type {Function}
-     */
-    // let reportError = createErrorReportFunction(JS_FILENAME);
 
     function reportError(error) {
         console.error(`tergar_meditation_app.js error: ${error}`);
@@ -99,30 +48,64 @@ $("#blurNotes .col-xs-12.col-sm-5.col-md-4").find("div[data-id]").first().childr
             .catch(reportError);
     }
 
+    /**
+     * Message passing interface
+     *
+     * command: "store_meditation_logs"
+     * key for stored meditation logs: "meditation_logs"
+     */
     browser.runtime.onMessage.addListener((message) => {
-        if (message.command === "scrape_and_store") {
-            scrapeStoreAndNotifyBackend(pageScrapeFunction, STORAGE_KEY, FILENAME)
-                .catch(reportError);
+        if (message.command === "store_meditation_logs") {
+            console.log('Content script received store_meditation_logs message.');
+            const storageKey = "meditation_logs";
+            // testLocalStore('logs4');
+            // browser.runtime.sendMessage({
+            //     "target": "background",
+            //     "command": "download_stored_object",
+            //     "storage_key": storageKey
+            // });
+            storeMeditationLogs(storageKey).then(
+                browser.runtime.sendMessage({
+                    "target": "background",
+                    "command": "download_stored_object",
+                    "storage_key": storageKey
+                }), reportError
+            ).catch(reportError)
+
         } else {
-            console.error(`got unexpected message from backend: ${message}`);
+            reportError(`Unknown message command: ${message.command}`);
         }
     });
 
     /**
-     * Remove illegal characters to form a filename or storage key.
-     * Adjust as needed.
+     * Store regular and mala meditation logs in browser.local storage
      *
-     * @param s
-     * @returns {void | string}
+     * @param key - key name for stored object
+     * @return promise - result of StorageArea.set()
      */
-    function sanitizeStringForName(s) {
-        return s.replace(/[^a-z0-9_]/gi, '_');
+    async function storeMeditationLogs(key) {
+        console.log(`Storing meditation logs with key name: ${key}`)
+        let meditationLogs = JSON.parse(window.localStorage.getItem('reduxPersist:dataMeditation'));
+        let malaMedLogs = JSON.parse(window.localStorage.getItem('reduxPersist:dataMalaMeditation'));
+        console.log(`regular meditation logs: ${meditationLogs.length}`)
+        console.log(`mala meditation logs: ${malaMedLogs.length}`);
+        meditationLogs = meditationLogs.concat(malaMedLogs);
+        let storeObj = {};
+        storeObj[key] = meditationLogs;
+        return browser.storage.local.set(storeObj);
     }
 
-    // function createErrorReportFunction(thisFileName) {
-    //     return function (error) {
-    //         console.error(`${thisFileName} error: ${error}`);
-    //     }
-    // }
+    function testLocalStore(keyName) {
+        let logs = ['one', 'two'];
+        let storeObj = {};
+        storeObj[keyName] = logs;
+        browser.storage.local.set(storeObj).then(() => {
+            browser.storage.local.get(keyName).then(logs2 =>
+                    console.log(`got ${keyName}: ${JSON.stringify(logs2)}`),
+                reportError)
+        }, reportError)
+            .catch(reportError)
+    }
+
 
 })();
