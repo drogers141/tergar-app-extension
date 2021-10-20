@@ -70,7 +70,7 @@ def format_time(seconds, hours_width=1):
 
 class MeditationLogs:
     def __init__(self, log_file):
-        entries = json.load(open(log_file)).get("valor")
+        entries = json.load(open(log_file))
         if entries:
             self.all_entries = sorted(entries, key=lambda e: e["date"])
         else:

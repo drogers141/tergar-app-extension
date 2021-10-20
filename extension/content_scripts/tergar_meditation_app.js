@@ -58,12 +58,6 @@
         if (message.command === "store_meditation_logs") {
             console.log('Content script received store_meditation_logs message.');
             const storageKey = "meditation_logs";
-            // testLocalStore('logs4');
-            // browser.runtime.sendMessage({
-            //     "target": "background",
-            //     "command": "download_stored_object",
-            //     "storage_key": storageKey
-            // });
             storeMeditationLogs(storageKey).then(
                 browser.runtime.sendMessage({
                     "target": "background",
@@ -94,18 +88,4 @@
         storeObj[key] = meditationLogs;
         return browser.storage.local.set(storeObj);
     }
-
-    function testLocalStore(keyName) {
-        let logs = ['one', 'two'];
-        let storeObj = {};
-        storeObj[keyName] = logs;
-        browser.storage.local.set(storeObj).then(() => {
-            browser.storage.local.get(keyName).then(logs2 =>
-                    console.log(`got ${keyName}: ${JSON.stringify(logs2)}`),
-                reportError)
-        }, reportError)
-            .catch(reportError)
-    }
-
-
 })();
