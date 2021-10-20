@@ -1,6 +1,9 @@
 /**
- * This script pulls the meditation logs from local storage used by Redux.
- * It stores them and passes a message to the background script to download.
+ * This content script pulls the meditation logs from local storage used by
+ * Redux Persist.
+ *
+ * It stores them in the extension's local storage and passes a message to the
+ * background script to download.
  */
 
 (function () {
@@ -17,35 +20,6 @@
 
     function reportError(error) {
         console.error(`tergar_meditation_app.js error: ${error}`);
-    }
-
-    /**
-     * Calls client scraper function, stores resulting object into local storage with key,
-     * then notifies background script to download it to filename in the user's
-     * download directory.
-     * Right now download options are to download automatically - ie no prompt for the user
-     * and to overwrite an existing file with the same name.
-     *
-     * @param scrapeFunction - called with no params, must return object that works with local
-     * storage (jsonifiable)
-     * @param storageKey - string for storage key - alphanumeric + underscore are ok
-     * @param filename - filename that will be downloaded to in the user's download directory
-     * @returns {Promise<void>}
-     */
-    function scrapeStoreAndNotifyBackend(scrapeFunction, storageKey, filename) {
-        console.log("scrapeStoreAndNotifyBackend() ..");
-        let objectToStore = scrapeFunction();
-        return browser.storage.local.set({[storageKey]: objectToStore})
-            .then(() => {
-                console.log(`stored data with key: ${storageKey} and filename: ${filename}`);
-                browser.runtime.sendMessage({
-                    "target": "background",
-                    "command": "download_stored_object",
-                    "storage_key": storageKey,
-                    "filename": filename,
-                });
-            })
-            .catch(reportError);
     }
 
     /**
