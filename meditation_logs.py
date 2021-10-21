@@ -25,7 +25,7 @@ from tabulate import tabulate
 # default download directory for your system - the json file downloaded by the extension will go in this dir
 DOWNLOAD_DIR = os.path.expanduser("~/Downloads")
 
-# directory where the json files will be stored
+# directory where the json files are stored
 TERGAR_DATA_DIR = os.path.expanduser("~/Dropbox/data/tergar")
 
 # backup meditation logs file if the last backup is older than this many days
@@ -111,6 +111,20 @@ class MeditationLogs:
         self.buckets["not-any-course"] = [entry for entry in self.all_entries
                                           if entry in self.buckets["custom"]
                                           and entry not in _custom_course_combined]
+        self.buckets['pol1'] = {}
+        bucket_regex_dict = {
+            'Four Thoughts 1': r'four[- ]+thoughts[- ]+1',
+            'Four Thoughts 2': r'four[- ]+thoughts[- ]+2',
+            'Four Thoughts 3': r'four[- ]+thoughts[- ]+3',
+            'Four Thoughts 4': r'four[- ]+thoughts[- ]+4',
+            'SMA': 'sma',
+            'APCFM': 'apcfm',
+        }
+        for section in bucket_regex_dict:
+            self.buckets['pol1'][section] = [
+                e for e in self.buckets['nop']
+                if e['notes'] and re.search(bucket_regex_dict[section], e['notes'].replace('\n', ' '), re.I)
+            ]
 
     def search_notes(self, regexp, return_full_entries=False):
         """Return notes matching regex search (case insensitive, multiline)
@@ -145,14 +159,9 @@ class MeditationLogs:
         """Return pretty string of log entry"""
         course = entry.get("course", {}).get("code", "n/a")
         str_list = [
-            "{:<21}{:>7}{:>10}{:>10}".format(entry.get("dateString"), format_time(entry.get("elapsed", 0)), course,
+            "{:<21}{:>7}{:>14}{:>10}".format(entry.get("dateString"), format_time(entry.get("elapsed", 0)), course,
                                              entry.get("id")),
             "{}".format(entry.get("notes")),
-            # "id: {}  duration: {}  course: {}".format(entry.get("id"), format_time(entry.get("elapsed", 0)), course),
-            # "date: {}".format(entry.get("dateString")),
-            # "duration: {}".format(format_time(entry.get("elapsed", 0))),
-            # "course: {}".format(course),
-            # "notes: {}".format(entry.get("notes")),
             ""
         ]
         return '\n'.join(str_list)
@@ -204,8 +213,6 @@ class MeditationLogs:
 
         return f"{title}\n\n{tabulate(table, headers=headers, tablefmt='presto', colalign=('left', 'right', 'right'))}"
 
-
-
     def general_table(self):
         """General stats, also NOP"""
         title = "General"
@@ -233,6 +240,26 @@ class MeditationLogs:
         table.append(["Total", *self._number_of_sessions_and_duration("fully-being")])
 
         return f"{title}\n\n{tabulate(table, headers=headers, tablefmt='presto', colalign=('left', 'right', 'right'))}"
+
+    def path_of_liberation_table(self):
+        title = "POL 1 - NOP"
+        headers = ["Section", "Sessions", "Total Time"]
+        table = []
+        all_pol1_nop_sessions = []
+        for section in ("Four Thoughts 1", "Four Thoughts 2", "Four Thoughts 3", "Four Thoughts 4",
+                        "SMA", "APCFM"):
+            if section in self.buckets["pol1"] and len(self.buckets["pol1"][section]) > 0:
+                if re.search('thoughts', section, re.I):
+                    all_pol1_nop_sessions.extend(self.buckets['pol1'][section])
+                table.append([section,
+                              len(self.buckets["pol1"][section]),
+                              format_time(MeditationLogs.total_duration_seconds(
+                                  self.buckets["pol1"][section]))])
+        table.append(["Total", len(all_pol1_nop_sessions),
+                      format_time(MeditationLogs.total_duration_seconds(all_pol1_nop_sessions))])
+
+        return f"{title}\n\n{tabulate(table, headers=headers, tablefmt='presto', colalign=('left', 'right', 'right'))}"
+
 
 
 def clean_up_old_files():
@@ -286,8 +313,8 @@ def main():
     move_downloaded_log_files_to_storage()
     log_file = latest_log()
     if not log_file:
-        print("No downloaded logs in ~/Downloads")
-        exit(0)
+        print(f"No downloaded meditation logs in {TERGAR_DATA_DIR} or {DOWNLOAD_DIR}")
+        return
     clean_up_old_files()
     backup_logs()
     print("meditation log file: {}\n".format(log_file))
@@ -307,12 +334,13 @@ def main():
             notes = ml.search_notes_in_bucket(args.search, args.search_bucket)
             print("Bucket: {}\n{} logs found\n".format(args.search_bucket, len(notes)))
             print('\n'.join(notes))
-        exit(0)
+        return
+
     elif args.search:
         if args.full_logs:
             logs = ml.search_notes(args.search, True)
             print("{} logs found\n".format(len(logs)))
-            print("{:^21}{:7}{:>9}{:>8}\n{}\n".format("Date", "Duration", "Course", "ID", "-" * 50))
+            print("{:^21}{:7}{:>14}{:>10}\n{}\n".format("Date", "Duration", "Course", "ID", "-" * 50))
             for log in logs:
                 print(MeditationLogs.format_log(log))
             total_duration = sum(e.get("elapsed", 0) for e in logs)
@@ -321,15 +349,17 @@ def main():
             notes = ml.search_notes(args.search)
             print("{} logs found\n".format(len(notes)))
             print('\n'.join(notes))
-        exit(0)
+        return
+
     elif args.list_buckets:
         print(", ".join(ml.buckets.keys()))
-        exit(0)
+        return
 
     print("Started tracking: May 5, 2019\n")
     print(ml.jol3_table() + "\n")
     print(ml.bardo_courses_table() + "\n")
     print(ml.fully_being_table() + "\n")
+    print(ml.path_of_liberation_table() + "\n")
     print(ml.general_table() + "\n")
 
 
