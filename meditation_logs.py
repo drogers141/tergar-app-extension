@@ -6,7 +6,16 @@ classifications to meditation sessions than are available in the Tergar app.
 It is intended to be modified as new meditation session types or other salient
 features are added in the meditation logs.
 
+If you use this extension for downloading the Tergar app logs and would
+like to customize this script, you can:
+
 Set DOWNLOAD_DIR and TERGAR_DATA_DIR for your system.
+
+Customize the MeditationLogs class following the patterns to create tables
+Customize main() to print your tables.
+
+you need to install tabulate:
+pip install tabulate
 
 Contact me if you like:
 Dave Rogers
@@ -97,17 +106,25 @@ class MeditationLogs:
         self.buckets["doa"] = [e for e in self.all_entries if e.get("notes") and "DOA" in e["notes"]]
         # Nectar of the Path
         self.buckets["nop"] = [e for e in self.all_entries if e["course"]["code"] == "NECTAR_PATH"]
-        # Tsoknyi Rinpoche - Fully Being
-        self.buckets["fully-being"] = [e for e in self.all_entries
-                                       if e.get("notes") and re.search(r"TR[- ]+FB", e["notes"], re.I)]
+        # Tsoknyi Rinpoche - Fully Being - v1 - the original course
+        self.buckets["fully-being-v1"] = [e for e in self.all_entries
+                                       if e.get("notes") and re.search(r"TR[- ]+FB[,\- ]", e["notes"], re.I)]
         self.buckets["fb-sections"] = {}
         for section in ("dropping", "four modes", "handshake", "essence love",
                         "subtle body", "calm abiding", "insight", "qualities"):
-            self.buckets["fb-sections"][section] = [e for e in self.buckets["fully-being"]
+            self.buckets["fb-sections"][section] = [e for e in self.buckets["fully-being-v1"]
+                                                    if re.search(section, e["notes"].replace('\n', ' '), re.I)]
+        # Tsoknyi Rinpoche - Fully Being - v2 - Oct 2021
+        self.buckets["fully-being-v2"] = [e for e in self.all_entries
+                                          if e.get("notes") and re.search(r"TR[- ]+FB2[,\- ]", e["notes"], re.I)]
+        self.buckets["fb2-sections"] = {}
+        for section in ("dropping", "handshake", "essence love", "four ways",
+                        "subtle body", "shinay", "insight", "qualities"):
+            self.buckets["fb2-sections"][section] = [e for e in self.buckets["fully-being-v2"]
                                                     if re.search(section, e["notes"].replace('\n', ' '), re.I)]
 
-        _custom_course_combined = (self.buckets["ded"] + self.buckets["adl"] + self.buckets["doa"]
-                                   + self.buckets["nop"] + self.buckets["fully-being"])
+        _custom_course_combined = (self.buckets["ded"] + self.buckets["adl"] + self.buckets["doa"] + self.buckets["nop"]
+                                    + self.buckets["fully-being-v1"] + self.buckets["fully-being-v1"])
         self.buckets["not-any-course"] = [entry for entry in self.all_entries
                                           if entry in self.buckets["custom"]
                                           and entry not in _custom_course_combined]
@@ -224,9 +241,9 @@ class MeditationLogs:
 
         return f"{title}\n\n{tabulate(table, headers=headers, tablefmt='presto', colalign=('left', 'right', 'right'))}"
 
-    def fully_being_table(self):
-        """Tsoknyi Rinpoche's Fully Being"""
-        title = "Fully Being    (combined section times are greater than total due to overlap)"
+    def fully_being_v1_table(self):
+        """Tsoknyi Rinpoche's Fully Being - version 1 of the course"""
+        title = "Fully Being V1 Course  (combined section times are greater than total due to overlap)"
         headers = ["Section", "Sessions", "Total Time"]
         table = []
         for section in ("Dropping", "Four Modes", "Handshake", "Essence Love",
@@ -236,10 +253,52 @@ class MeditationLogs:
                 table.append([section,
                               len(self.buckets["fb-sections"][section_bucket]),
                               format_time(MeditationLogs.total_duration_seconds(
-                                  self.buckets["fb-sections"][section.lower()]))])
-        table.append(["Total", *self._number_of_sessions_and_duration("fully-being")])
+                                  self.buckets["fb-sections"][section_bucket]))])
+        table.append(["Total", *self._number_of_sessions_and_duration("fully-being-v1")])
 
         return f"{title}\n\n{tabulate(table, headers=headers, tablefmt='presto', colalign=('left', 'right', 'right'))}"
+
+    def fully_being_v2_table(self):
+        """Tsoknyi Rinpoche's Fully Being - version 2 of the course - Oct 2021
+        In this version, there are 3 courses - or levels of courses
+        - Essentials Course
+        - Immersion Level 1
+        - Immersion Level 2
+
+        I'll be going through Immersion Level 1 then 2, probably.  The levels both have sections like the v1,
+        but in the order:
+        - Dropping, Handshake, Essence Love, Subtle Body, 4 Ways of Seeing, Settling the Mind, Insight
+
+        I will keep these names for the regular expressions except '4 Ways of Seeing' will be 'Four Ways', and
+        'Settling the Mind' will be 'Shinay'.
+
+        Each section has a number of pages each with a unit of teaching - video, notes, daily instruction, etc.
+        These all are named with no numbers, but for ease I will refer to a section by its number in a 1-based
+        sequence.
+
+        All told, this means Immersion Level 1, Handshake "Feeling Awareness", the 8th topic, will be referred
+        to in the meditation log as Handshake 1.8.  Immersion Level 2 Handshake will be Handshake 2.x, etc.
+        To distinguish between Fully Being Course versions, I'll use:
+        TR - FB2 - ...
+        This is backwards compatible so the previous counts will stand.
+        For now, I won't worry about displaying the counts per topic in course sections (as I haven't with v1).
+        They can be picked up with a search.
+        """
+        title = "Fully Being V2 Course  (combined section times are greater than total due to overlap)"
+        headers = ["Section", "Sessions", "Total Time"]
+        table = []
+        for section in ("Dropping", "Handshake", "Essence Love", "Four Ways",
+                        "Subtle Body", "Shinay", "Insight", "Qualities"):
+            section_bucket = section.lower()
+            if section_bucket in self.buckets["fb2-sections"] and len(self.buckets["fb2-sections"][section_bucket]) > 0:
+                table.append([section,
+                              len(self.buckets["fb2-sections"][section_bucket]),
+                              format_time(MeditationLogs.total_duration_seconds(
+                                  self.buckets["fb2-sections"][section_bucket]))])
+        table.append(["Total", *self._number_of_sessions_and_duration("fully-being-v2")])
+
+        return f"{title}\n\n{tabulate(table, headers=headers, tablefmt='presto', colalign=('left', 'right', 'right'))}"
+
 
     def path_of_liberation_table(self):
         title = "POL 1 - NOP"
@@ -304,8 +363,8 @@ def main():
     parser.add_argument("-s", "--search", help='search log notes for case-insensitive regex')
     parser.add_argument("-f", "--full-logs", help='with -s, --search - print full logs rather than just notes',
                         action="store_true")
-    parser.add_argument("-b", "--search-bucket", help="search a single bucket of logs with case-insensitive regex." +
-                                                      " SEARCH_BUCKET is a bucket name")
+    parser.add_argument("-b", "--search-bucket", help="with -s, --search - search a single bucket of logs with " +
+                                                      "case-insensitive regex. SEARCH_BUCKET is a bucket name")
     parser.add_argument("-l", "--list-buckets", help="list available bucket names to search",
                         action="store_true")
     args = parser.parse_args()
@@ -358,7 +417,8 @@ def main():
     print("Started tracking: May 5, 2019\n")
     print(ml.jol3_table() + "\n")
     print(ml.bardo_courses_table() + "\n")
-    print(ml.fully_being_table() + "\n")
+    print(ml.fully_being_v1_table() + "\n")
+    print(ml.fully_being_v2_table() + '\n')
     print(ml.path_of_liberation_table() + "\n")
     print(ml.general_table() + "\n")
 
