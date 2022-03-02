@@ -3,5 +3,9 @@
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd -P )"
 
-$SCRIPT_DIR/../venv/bin/python  $SCRIPT_DIR/../meditation_logs.py "$@"
+# use this method if you want to have the python virtual environment
+# under venv/ in the project
+#$SCRIPT_DIR/../venv/bin/python  $SCRIPT_DIR/../meditation_logs.py "$@"
 
+# currently using pyenv
+/Users/drogers/.pyenv/versions/tergar-app-extension/bin/python  $SCRIPT_DIR/../meditation_logs.py "$@"

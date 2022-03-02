@@ -28,7 +28,9 @@ import glob
 import re
 import argparse
 import shutil
+from datetime import datetime, date, timedelta
 
+from dateutil.parser import parse as parse_date
 from tabulate import tabulate
 
 # default download directory for your system - the json file downloaded by the extension will go in this dir
@@ -39,6 +41,40 @@ TERGAR_DATA_DIR = os.path.expanduser("~/Dropbox/data/tergar")
 
 # backup meditation logs file if the last backup is older than this many days
 BACKUP_AFTER_NUM_DAYS = 30
+
+
+def _parse_date_element(e):
+    try:
+        return (datetime.today() - timedelta(days=int(e))).date()
+    except ValueError:
+        return parse_date(e).date()
+
+
+def parse_date_range(date_range_string):
+    """Parse a comma-delimited string into a datetime.date tuple
+
+    date_range_string - comma-delimited string representing date range
+      - "a, b" date range string is interpreted as follows
+        a, b -> duration from a to b inclusive
+        a, b can be anything dateutil can parse
+        a, b can also be an int indicating the number of days ago
+        if a is the empty string or None, then the range is from beginning_of_history (or the Epoch) to b
+        if b is the empty string or None, then the range is from a to now()
+        Examples:
+        "3," -> from 3 days ago until now
+        ",3" -> beginning_of_history until 3 days ago
+        "2019-01-01 00:00:00," -> Jan 1 2019 until now
+    beginning_of_history - datetime.date - defaults to 1970-01-01
+    Returns (datetime.date, datetime.date)
+    """
+    strvals = date_range_string.split(",")
+    if not strvals[0]:
+        date_range = (date(1970, 1, 1), _parse_date_element(strvals[1]))
+    elif not strvals[1]:
+        date_range = (_parse_date_element(strvals[0]), date.today())
+    else:
+        date_range = (_parse_date_element(strvals[0]), _parse_date_element(strvals[1]))
+    return date_range
 
 
 def stored_meditation_log_files():
@@ -143,22 +179,40 @@ class MeditationLogs:
                 if e['notes'] and re.search(bucket_regex_dict[section], e['notes'].replace('\n', ' '), re.I)
             ]
 
-    def search_notes(self, regexp, return_full_entries=False):
+    def search_notes(self, regexp, return_full_entries=False, date_range=None):
         """Return notes matching regex search (case insensitive, multiline)
         return_full_entries - if True return the full log entries
+        date_range - sequence (date, date) which represent and inclusive date range to limit data to
         Default - returns a list of the "notes" key value of the entry dicts
         """
         regex = re.compile(regexp, re.I | re.DOTALL)
+        if date_range:
+            beginning, ending = date_range
+            # note we need to use the dateString as the 'date' timestamp is not accurate probably
+            # due to adding a timezone - this could be checked more rigorously, but a short
+            # check of the data for 'id': 1566145 on 'dateString': '2021-12-25 00:00:00'
+            # shows this error
+            entries = [e for e in self.all_entries
+                       if e.get('notes') and parse_date(e['dateString']).date() >= beginning
+                       and parse_date(e['dateString']).date() <= ending]
+        else:
+            entries = [e for e in self.all_entries if e.get("notes")]
         if return_full_entries:
-            return [e for e in self.all_entries if e.get("notes") and regex.search(e.get("notes"))]
-        return [e.get("notes") for e in self.all_entries if e.get("notes") and regex.search(e.get("notes"))]
+            return [e for e in entries if regex.search(e.get("notes"))]
+        return [e.get("notes") for e in entries if regex.search(e.get("notes"))]
 
-    def search_notes_in_bucket(self, regexp, bucket_name, return_full_entries=False):
+    def search_notes_in_bucket(self, regexp, bucket_name, return_full_entries=False, date_range=None):
         regex = re.compile(regexp, re.I | re.DOTALL)
+        if date_range:
+            beginning, ending = date_range
+            entries = [e for e in self.buckets[bucket_name]
+                       if e.get('notes') and parse_date(e['dateString']).date() >= beginning
+                       and parse_date(e['dateString']).date <= ending]
+        else:
+            entries = [e for e in self.buckets[bucket_name] if e.get("notes")]
         if return_full_entries:
-            return [e for e in self.buckets[bucket_name] if e.get("notes") and regex.search(e.get("notes"))]
-        return [e.get("notes") for e in self.buckets[bucket_name]
-                if e.get("notes") and regex.search(e.get("notes"))]
+            return [e for e in entries if regex.search(e.get("notes"))]
+        return [e.get("notes") for e in entries if regex.search(e.get("notes"))]
 
     @classmethod
     def total_duration_seconds(cls, bucket):
@@ -299,7 +353,6 @@ class MeditationLogs:
 
         return f"{title}\n\n{tabulate(table, headers=headers, tablefmt='presto', colalign=('left', 'right', 'right'))}"
 
-
     def path_of_liberation_table(self):
         title = "POL 1 - NOP"
         headers = ["Section", "Sessions", "Total Time"]
@@ -320,7 +373,6 @@ class MeditationLogs:
         return f"{title}\n\n{tabulate(table, headers=headers, tablefmt='presto', colalign=('left', 'right', 'right'))}"
 
 
-
 def clean_up_old_files():
     """Save 2 most recent meditation log files"""
     log_files = stored_meditation_log_files()
@@ -339,7 +391,7 @@ def latest_log():
 def datetime_from_filename(filename):
     """Returns datetime with no tz"""
     datetime_str = re.search(r'(\d{4}.*)-\d\d\.\d\d.json', filename).groups()[0]
-    return datetime.datetime.strptime(datetime_str, '%Y-%m-%dT%H.%M.%S')
+    return datetime.strptime(datetime_str, '%Y-%m-%dT%H.%M.%S')
 
 
 def backup_logs():
@@ -350,7 +402,7 @@ def backup_logs():
     """
     latest_backup = sorted(backed_up_log_files())[-1]
     latest_backup_date = datetime_from_filename(latest_backup)
-    if datetime.datetime.now() - latest_backup_date >= datetime.timedelta(days=BACKUP_AFTER_NUM_DAYS):
+    if datetime.now() - latest_backup_date >= timedelta(days=BACKUP_AFTER_NUM_DAYS):
         backup_filename = latest_log().replace('tergar-meditation-logs', 'tergar-meditation-logs-backup')
         shutil.copy(latest_log(), backup_filename)
         print(f"last backup older than {BACKUP_AFTER_NUM_DAYS} days, backing up:")
@@ -367,6 +419,10 @@ def main():
                                                       "case-insensitive regex. SEARCH_BUCKET is a bucket name")
     parser.add_argument("-l", "--list-buckets", help="list available bucket names to search",
                         action="store_true")
+    parser.add_argument('-d', '--date-range', help='search by date range. DATE_RANGE is a comma-delimited inclusive ' +
+                        'range, which can be open-ended - so each element is optional.  Each element can be any ' +
+                        'string parseable by dateutil as a date, or an integer representing days ago.  See ' +
+                        'parse_date_range for examples.')
     args = parser.parse_args()
 
     move_downloaded_log_files_to_storage()
@@ -378,11 +434,16 @@ def main():
     backup_logs()
     print("meditation log file: {}\n".format(log_file))
 
+    date_range = parse_date_range(args.date_range) if args.date_range else None
     ml = MeditationLogs(log_file)
+
     if args.search_bucket:
         print(f"search_bucket: {args.search_bucket}")
         if args.full_logs:
-            logs = ml.search_notes_in_bucket(args.search, args.search_bucket, True)
+            logs = ml.search_notes_in_bucket(args.search,
+                                             args.search_bucket,
+                                             return_full_entries=True,
+                                             date_range=date_range)
             print("Bucket: {}\n{} logs found\n".format(args.search_bucket, len(logs)))
             print("{:^21}{:7}{:>9}{:>8}\n{}\n".format("Date", "Duration", "Course", "ID", "-" * 50))
             for log in logs:
@@ -390,14 +451,17 @@ def main():
             total_duration = sum(e.get("elapsed", 0) for e in logs)
             print("Total Duration:  {}\n".format(format_time(total_duration)))
         else:
-            notes = ml.search_notes_in_bucket(args.search, args.search_bucket)
+            notes = ml.search_notes_in_bucket(args.search,
+                                              args.search_bucket,
+                                              return_full_entries=False,
+                                              date_range=date_range)
             print("Bucket: {}\n{} logs found\n".format(args.search_bucket, len(notes)))
             print('\n'.join(notes))
         return
 
     elif args.search:
         if args.full_logs:
-            logs = ml.search_notes(args.search, True)
+            logs = ml.search_notes(args.search, return_full_entries=True, date_range=date_range)
             print("{} logs found\n".format(len(logs)))
             print("{:^21}{:7}{:>14}{:>10}\n{}\n".format("Date", "Duration", "Course", "ID", "-" * 50))
             for log in logs:
@@ -405,7 +469,7 @@ def main():
             total_duration = sum(e.get("elapsed", 0) for e in logs)
             print("Total Duration:  {}\n".format(format_time(total_duration)))
         else:
-            notes = ml.search_notes(args.search)
+            notes = ml.search_notes(args.search, return_full_entries=False, date_range=date_range)
             print("{} logs found\n".format(len(notes)))
             print('\n'.join(notes))
         return
