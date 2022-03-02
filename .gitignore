@@ -5,3 +5,5 @@ __pycache__
 *.fwsbak
 ipython_log*
 venv/
+.python-version
+
