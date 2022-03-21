@@ -37,7 +37,7 @@ from tabulate import tabulate
 DOWNLOAD_DIR = os.path.expanduser("~/Downloads")
 
 # directory where the json files are stored
-TERGAR_DATA_DIR = os.path.expanduser("~/Dropbox/data/tergar")
+TERGAR_DATA_DIR = os.path.expanduser("~/Dropbox/data/tergar/tergar-meditation-app")
 
 # backup meditation logs file if the last backup is older than this many days
 BACKUP_AFTER_NUM_DAYS = 30
