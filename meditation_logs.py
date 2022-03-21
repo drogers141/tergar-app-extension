@@ -112,7 +112,15 @@ def format_time(seconds, hours_width=1):
     else:
         return "{:d}:{:02d}".format(m, s)
 
-
+# TODO - clean this up
+# performance - hasn't been a problem because the data is small, but bucketing/tagging
+# should be done in one pass where possible
+# So far each time I needed something I just added new dicts, but at this point perhaps
+# using class attributes might be easier to understand.
+# Perhaps a little more OO design might not be terrible
+# It would be interesting to compare performance while changing from just dealing with
+# dictionaries to using attributes.  Not sure whether I need to change smaller dicts into
+# objects.
 class MeditationLogs:
     def __init__(self, log_file):
         entries = json.load(open(log_file))
@@ -125,9 +133,16 @@ class MeditationLogs:
 
     def bucket_entries(self):
         # jol3 and not-jol3 should partition the complete set of logs
-        self.buckets["jol3"] = [e for e in self.all_entries if e["course"]["code"] == "JOL3"]
-        self.buckets["not-jol3"] = [e for e in self.all_entries if e["course"]["code"] != "JOL3"]
-        self.buckets["custom"] = [e for e in self.all_entries if e["course"]["code"] == "CUSTOM"]
+        self.buckets["jol3"] = [e for e in self.all_entries if e["course"].get("code") == "JOL3"]
+        self.buckets["not-jol3"] = [e for e in self.all_entries if e["course"].get("code") != "JOL3"]
+        # breaking change to json format on Mar 21, 2022
+        # see file ./tergar-breaking-changes
+        # old 'Custom' course entries still have a 'code' field
+        # but the new ones don't, so add them
+        self.buckets["custom"] = [e for e in self.all_entries if e["course"].get("code") == "CUSTOM"]
+        for e in self.all_entries:
+            if ('code' not in e['course']) and e['course'].get('name') == 'Custom':
+                self.buckets['custom'].append(e)
         # these buckets are based on my convention of putting W1 through W6 for the week of the course
         # and therefore the different meditations since each week introduced a new method
         self.buckets["jol3-by-week"] = {}
@@ -141,7 +156,7 @@ class MeditationLogs:
         # Dying and Awakening Course - DOA nickname
         self.buckets["doa"] = [e for e in self.all_entries if e.get("notes") and "DOA" in e["notes"]]
         # Nectar of the Path
-        self.buckets["nop"] = [e for e in self.all_entries if e["course"]["code"] == "NECTAR_PATH"]
+        self.buckets["nop"] = [e for e in self.all_entries if e["course"].get("code") == "NECTAR_PATH"]
         # Tsoknyi Rinpoche - Fully Being - v1 - the original course
         self.buckets["fully-being-v1"] = [e for e in self.all_entries
                                        if e.get("notes") and re.search(r"TR[- ]+FB[,\- ]", e["notes"], re.I)]

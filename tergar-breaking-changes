@@ -1,0 +1,55 @@
+First seen on Mar 21, 2022
+
+The 'Custom' course json object has changed, dropping fields, including the 'code' field which
+we rely on when bucketing the entries.  See MeditationLogs.bucket_entries.
+
+All other types of courses that we use seem not to have changed.
+
+I don't know if this change is a bug or a new format, so coding to handle it, and documenting
+what it looks like now.
+
+This is the previous format (example from 2022-03-19):
+
+  {
+    "id": 1699377,
+    "date": 1647648000000,
+    "dateString": "2022-03-19 00:00:00",
+    "elapsed": 1800,
+    "feeling": 1,
+    "place": 1,
+    "notes": "TR - FB2 - Subtle Body 2.13\n30x lung breathing",
+    "course": {
+      "id": 6,
+      "active": true,
+      "code": "CUSTOM",
+      "createdDate": 1516206089000,
+      "description": "Custom Course",
+      "is_mala_course": false,
+      "name": "Custom",
+      "notes": "",
+      "updatedDate": 1516206089000,
+      "userId": null,
+      "createdDateString": "2018-01-17 16:21:29",
+      "updatedDateString": "2018-01-17 16:21:29"
+    }
+  },
+
+This is the new format (example from 2022-03-21)
+
+  {
+    "id": "623253d1-ad90-4a72-add7-4fdb04e624aa",
+    "date": 1647874609000,
+    "elapsed": 2267,
+    "notes": "TR - FB2 - Subtle Body 2.14 (Trauma)",
+    "course": {
+      "id": 6,
+      "name": "Custom",
+      "is_mala_course": false
+    },
+    "feeling": "HAPPY",
+    "place": "HOME"
+  },
+
+Will code to handle this new scenario very specifically to only deal with the change to the
+'Custom' course, so other changes may break the bucketing and we can investigate.
+
