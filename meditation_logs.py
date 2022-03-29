@@ -63,6 +63,7 @@ def parse_date_range(date_range_string):
         Examples:
         "3," -> from 3 days ago until now
         ",3" -> beginning_of_history until 3 days ago
+        "7, 3" -> between 7 and 3 days ago - inclusive
         "2019-01-01 00:00:00," -> Jan 1 2019 until now
     beginning_of_history - datetime.date - defaults to 1970-01-01
     Returns (datetime.date, datetime.date)
@@ -482,7 +483,7 @@ def main():
             for log in logs:
                 print(MeditationLogs.format_log(log))
             total_duration = sum(e.get("elapsed", 0) for e in logs)
-            print("Total Duration:  {}\n".format(format_time(total_duration)))
+            print("Sessions:  Total Duration:\n{:>8}{:>17}".format(len(logs), format_time(total_duration)))
         else:
             notes = ml.search_notes(args.search, return_full_entries=False, date_range=date_range)
             print("{} logs found\n".format(len(notes)))
