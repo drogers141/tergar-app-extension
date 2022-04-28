@@ -29,9 +29,11 @@ import re
 import argparse
 import shutil
 from datetime import datetime, date, timedelta
+import tracemalloc
 
 from dateutil.parser import parse as parse_date
 from tabulate import tabulate
+import psutil
 
 # default download directory for your system - the json file downloaded by the extension will go in this dir
 DOWNLOAD_DIR = os.path.expanduser("~/Downloads")
@@ -112,6 +114,7 @@ def format_time(seconds, hours_width=1):
         return "{1:{0}d}:{2:02d}:{3:02d}".format(hours_width, h, m, s)
     else:
         return "{:d}:{:02d}".format(m, s)
+
 
 # TODO - clean this up
 # performance - hasn't been a problem because the data is small, but bucketing/tagging
@@ -245,12 +248,16 @@ class MeditationLogs:
     def format_log(cls, entry):
         """Return pretty string of log entry"""
         course = entry.get("course", {}).get("code", "n/a")
-        str_list = [
-            "{:<21}{:>7}{:>14}{:>10}".format(entry.get("dateString"), format_time(entry.get("elapsed", 0)), course,
-                                             entry.get("id")),
-            "{}".format(entry.get("notes")),
-            ""
-        ]
+        try:
+            str_list = [
+                "{:<21}{:>7}{:>14}{:>10}".format(entry.get("dateString"), format_time(entry.get("elapsed", 0)), course,
+                                                 entry.get("id")),
+                "{}".format(entry.get("notes")),
+                ""
+            ]
+        except TypeError as error:
+            print(f"Error with entry: {entry}")
+            raise
         return '\n'.join(str_list)
 
     # returns (week name, number of entries, total seconds of meditation for that week) for each week
@@ -427,6 +434,8 @@ def backup_logs():
 
 def main():
 
+    tracemalloc.start()
+
     parser = argparse.ArgumentParser()
     parser.add_argument("-s", "--search", help='search log notes for case-insensitive regex')
     parser.add_argument("-f", "--full-logs", help='with -s, --search - print full logs rather than just notes',
@@ -450,8 +459,28 @@ def main():
     backup_logs()
     print("meditation log file: {}\n".format(log_file))
 
+
     date_range = parse_date_range(args.date_range) if args.date_range else None
     ml = MeditationLogs(log_file)
+
+    print('Memory stats:')
+    memory_mb = psutil.Process().memory_info().rss / (1024 **2)
+    print(f'Process resident memory:  {memory_mb:.3f} MiB')
+
+    ## example of displaying lines of source code that allocate the largest
+    ## amount of memory
+    # snapshot = tracemalloc.take_snapshot()
+    # top_stats = snapshot.statistics('lineno')
+    # n = 20
+    # print(f'Top {n} lines using memory')
+    # for stat in top_stats[:n]:
+    #     print(stat)
+
+    current_KiB, peak_KiB = [int(x/1024) for x in tracemalloc.get_traced_memory()]
+    print(f'tracemalloc: current: {current_KiB} KiB  peak: {peak_KiB} KiB')
+    print()
+
+    tracemalloc.stop()
 
     if args.search_bucket:
         print(f"search_bucket: {args.search_bucket}")
