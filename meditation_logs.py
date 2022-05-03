@@ -6,22 +6,19 @@ classifications to meditation sessions than are available in the Tergar app.
 It is intended to be modified as new meditation session types or other salient
 features are added in the meditation logs.
 
-If you use this extension for downloading the Tergar app logs and would
-like to customize this script, you can:
+Notes:
 
-Set DOWNLOAD_DIR and TERGAR_DATA_DIR for your system.
-
-Customize the MeditationLogs class following the patterns to create tables
-Customize main() to print your tables.
-
-you need to install tabulate:
-pip install tabulate
-
-Contact me if you like:
-Dave Rogers
-dave@drogers.us
+datetimes:  (Apr 2022) As of now, the meditation log entries have a
+    timestamp in the 'date' key, and a string date in the 'dateString' key.
+    Recently some entries did not have the 'dateString' key which I was using
+    as the datetime for the entry.  The 'dateString' key is a naive datetime
+    that corresponds to the local time of the entry.  To get this datetime
+    from the 'date' timestamp, use
+    datetime.datetime.utcfromtimestamp(entry['date'] // 1000).
+    Since the datetimes are naive, this works regardless of the timezone active
+    when the meditation session was logged.  See check_datetimes_for_entry()
+    for a way to test that this behavior is still intact.
 """
-import datetime
 import json
 import os
 import glob
@@ -34,6 +31,7 @@ import tracemalloc
 from dateutil.parser import parse as parse_date
 from tabulate import tabulate
 import psutil
+
 
 # default download directory for your system - the json file downloaded by the extension will go in this dir
 DOWNLOAD_DIR = os.path.expanduser("~/Downloads")
@@ -116,12 +114,30 @@ def format_time(seconds, hours_width=1):
         return "{:d}:{:02d}".format(m, s)
 
 
+def check_datetimes_for_entry(entry):
+    """Utility function - use this to check that the 'date' key and the
+    'dateString' key are consistent, or if there is no 'dateString'.
+
+    As of now there are only a handful of entries that don't have a
+    'dateString'.
+    """
+    timestamp_localtime = datetime.utcfromtimestamp(entry['date'] // 1000)
+    if 'dateString' in entry:
+        datestring_localtime = parse_date(entry['dateString'])
+        if datestring_localtime == timestamp_localtime:
+            print('.', end='')
+        else:
+            print(f'"date" does not match "dateString" for entry: {entry}')
+    else:
+        # print(f'no dateString in entry: {entry}')
+        print(f'No dateString in entry: id: {entry["id"]}, timestamp: {entry["date"]} {timestamp_localtime =}')
+
+
 # TODO - clean this up
 # performance - hasn't been a problem because the data is small, but bucketing/tagging
 # should be done in one pass where possible
 # So far each time I needed something I just added new dicts, but at this point perhaps
 # using class attributes might be easier to understand.
-# Perhaps a little more OO design might not be terrible
 # It would be interesting to compare performance while changing from just dealing with
 # dictionaries to using attributes.  Not sure whether I need to change smaller dicts into
 # objects.
@@ -198,64 +214,54 @@ class MeditationLogs:
                 if e['notes'] and re.search(bucket_regex_dict[section], e['notes'].replace('\n', ' '), re.I)
             ]
 
-    def search_notes(self, regexp, return_full_entries=False, date_range=None):
+    def search_notes(self, regexp, bucket=None, return_full_entries=False, date_range=None):
         """Return notes matching regex search (case insensitive, multiline)
+
+        bucket - if set only search notes in self.buckets[bucket]
         return_full_entries - if True return the full log entries
         date_range - sequence (date, date) which represent and inclusive date range to limit data to
         Default - returns a list of the "notes" key value of the entry dicts
         """
         regex = re.compile(regexp, re.I | re.DOTALL)
+        entries_to_search = self.buckets[bucket] if bucket else self.all_entries
+        entries_found = []
         if date_range:
             beginning, ending = date_range
-            # note we need to use the dateString as the 'date' timestamp is not accurate probably
-            # due to adding a timezone - this could be checked more rigorously, but a short
-            # check of the data for 'id': 1566145 on 'dateString': '2021-12-25 00:00:00'
-            # shows this error
-            entries = [e for e in self.all_entries
-                       if e.get('notes') and parse_date(e['dateString']).date() >= beginning
-                       and parse_date(e['dateString']).date() <= ending]
+            for entry in entries_to_search:
+                entry_date = datetime.utcfromtimestamp(entry['date'] // 1000)
+                if entry.get('notes') and beginning <= entry_date <= ending and regex.search(entry['notes']):
+                    entries_found.append(entry)
         else:
-            entries = [e for e in self.all_entries if e.get("notes")]
+            entries_found = [e for e in self.all_entries if e.get("notes") and regex.search(e['notes'])]
         if return_full_entries:
-            return [e for e in entries if regex.search(e.get("notes"))]
-        return [e.get("notes") for e in entries if regex.search(e.get("notes"))]
+            return entries_found
+        return [e.get("notes") for e in entries_found]
 
-    def search_notes_in_bucket(self, regexp, bucket_name, return_full_entries=False, date_range=None):
-        regex = re.compile(regexp, re.I | re.DOTALL)
-        if date_range:
-            beginning, ending = date_range
-            entries = [e for e in self.buckets[bucket_name]
-                       if e.get('notes') and parse_date(e['dateString']).date() >= beginning
-                       and parse_date(e['dateString']).date <= ending]
-        else:
-            entries = [e for e in self.buckets[bucket_name] if e.get("notes")]
-        if return_full_entries:
-            return [e for e in entries if regex.search(e.get("notes"))]
-        return [e.get("notes") for e in entries if regex.search(e.get("notes"))]
+    @staticmethod
+    def total_duration_seconds(entries):
+        elapsed_list = [e.get("elapsed") for e in entries]
+        return sum(int(x) for x in elapsed_list)
 
-    @classmethod
-    def total_duration_seconds(cls, bucket):
-        elapsed_list = [e.get("elapsed") for e in bucket]
-        seconds = sum(int(x) for x in elapsed_list)
-        return seconds
-
-    @classmethod
-    def most_recent(cls, bucket):
+    @staticmethod
+    def most_recent(bucket):
         if len(bucket) > 0:
             return bucket[-1]
 
-    @classmethod
-    def format_log(cls, entry):
+    @staticmethod
+    def format_log(entry):
         """Return pretty string of log entry"""
-        course = entry.get("course", {}).get("code", "n/a")
+        course = entry.get("course", {}).get("code", "N/A")
         try:
+            date_string = entry.get('dateString')
+            if not date_string:
+                date_string = str(datetime.utcfromtimestamp(entry['date'] // 1000))
             str_list = [
-                "{:<21}{:>7}{:>14}{:>10}".format(entry.get("dateString"), format_time(entry.get("elapsed", 0)), course,
+                "{:<21}{:>7}{:>14}    {}".format(date_string, format_time(entry.get("elapsed", 0)), course,
                                                  entry.get("id")),
                 "{}".format(entry.get("notes")),
                 ""
             ]
-        except TypeError as error:
+        except Exception:
             print(f"Error with entry: {entry}")
             raise
         return '\n'.join(str_list)
@@ -434,8 +440,6 @@ def backup_logs():
 
 def main():
 
-    tracemalloc.start()
-
     parser = argparse.ArgumentParser()
     parser.add_argument("-s", "--search", help='search log notes for case-insensitive regex')
     parser.add_argument("-f", "--full-logs", help='with -s, --search - print full logs rather than just notes',
@@ -448,7 +452,11 @@ def main():
                         'range, which can be open-ended - so each element is optional.  Each element can be any ' +
                         'string parseable by dateutil as a date, or an integer representing days ago.  See ' +
                         'parse_date_range for examples.')
+    parser.add_argument('-m', '--memory-stats', action='store_true', help='print memory stats')
     args = parser.parse_args()
+
+    if args.memory_stats:
+        tracemalloc.start()
 
     move_downloaded_log_files_to_storage()
     log_file = latest_log()
@@ -463,43 +471,44 @@ def main():
     date_range = parse_date_range(args.date_range) if args.date_range else None
     ml = MeditationLogs(log_file)
 
-    print('Memory stats:')
-    memory_mb = psutil.Process().memory_info().rss / (1024 **2)
-    print(f'Process resident memory:  {memory_mb:.3f} MiB')
+    if args.memory_stats:
+        print('Memory stats:')
+        memory_mb = psutil.Process().memory_info().rss / (1024 **2)
+        print(f'Process resident memory:  {memory_mb:.3f} MiB')
 
-    ## example of displaying lines of source code that allocate the largest
-    ## amount of memory
-    # snapshot = tracemalloc.take_snapshot()
-    # top_stats = snapshot.statistics('lineno')
-    # n = 20
-    # print(f'Top {n} lines using memory')
-    # for stat in top_stats[:n]:
-    #     print(stat)
+        ## example of displaying lines of source code that allocate the largest
+        ## amount of memory
+        # snapshot = tracemalloc.take_snapshot()
+        # top_stats = snapshot.statistics('lineno')
+        # n = 20
+        # print(f'Top {n} lines using memory')
+        # for stat in top_stats[:n]:
+        #     print(stat)
 
-    current_KiB, peak_KiB = [int(x/1024) for x in tracemalloc.get_traced_memory()]
-    print(f'tracemalloc: current: {current_KiB} KiB  peak: {peak_KiB} KiB')
-    print()
+        current_KiB, peak_KiB = [int(x/1024) for x in tracemalloc.get_traced_memory()]
+        print(f'tracemalloc: current: {current_KiB} KiB  peak: {peak_KiB} KiB')
+        print()
 
-    tracemalloc.stop()
+        tracemalloc.stop()
 
     if args.search_bucket:
-        print(f"search_bucket: {args.search_bucket}")
+        print(f"Search_bucket: {args.search_bucket}")
         if args.full_logs:
-            logs = ml.search_notes_in_bucket(args.search,
-                                             args.search_bucket,
-                                             return_full_entries=True,
-                                             date_range=date_range)
+            logs = ml.search_notes(args.search,
+                                   bucket=args.search_bucket,
+                                   return_full_entries=True,
+                                   date_range=date_range)
             print("Bucket: {}\n{} logs found\n".format(args.search_bucket, len(logs)))
             print("{:^21}{:7}{:>9}{:>8}\n{}\n".format("Date", "Duration", "Course", "ID", "-" * 50))
             for log in logs:
                 print(MeditationLogs.format_log(log))
             total_duration = sum(e.get("elapsed", 0) for e in logs)
-            print("Total Duration:  {}\n".format(format_time(total_duration)))
+            print("Sessions:  Total Duration:\n{:>8}{:>17}".format(len(logs), format_time(total_duration)))
         else:
-            notes = ml.search_notes_in_bucket(args.search,
-                                              args.search_bucket,
-                                              return_full_entries=False,
-                                              date_range=date_range)
+            notes = ml.search_notes(args.search,
+                                    bucket=args.search_bucket,
+                                    return_full_entries=False,
+                                    date_range=date_range)
             print("Bucket: {}\n{} logs found\n".format(args.search_bucket, len(notes)))
             print('\n'.join(notes))
         return
