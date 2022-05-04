@@ -139,14 +139,6 @@ def check_datetimes_for_entry(entry):
         print(f'No dateString in entry: id: {entry["id"]}, timestamp: {entry["date"]} {timestamp_localtime =}')
 
 
-# TODO - clean this up
-# performance - hasn't been a problem because the data is small, but bucketing/tagging
-# should be done in one pass where possible
-# So far each time I needed something I just added new dicts, but at this point perhaps
-# using class attributes might be easier to understand.
-# It would be interesting to compare performance while changing from just dealing with
-# dictionaries to using attributes.  Not sure whether I need to change smaller dicts into
-# objects.
 class MeditationLogs:
     def __init__(self, log_file):
         entries = json.load(open(log_file))
