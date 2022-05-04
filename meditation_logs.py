@@ -25,13 +25,19 @@ import glob
 import re
 import argparse
 import shutil
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, time
 import tracemalloc
 
 from dateutil.parser import parse as parse_date
 from tabulate import tabulate
 import psutil
 
+__all__ = ('DOWNLOAD_DIR', 'TERGAR_DATA_DIR', 'BACKUP_AFTER_NUM_DAYS',
+           'parse_date_range', 'stored_meditation_log_files', 'backed_up_log_files',
+           'move_downloaded_log_files_to_storage', 'hours_minutes_seconds',
+           'format_time', 'check_datetimes_for_entry', 'MeditationLogs',
+           'clean_up_old_files', 'latest_log', 'datetime_from_filename',
+           'backup_logs')
 
 # default download directory for your system - the json file downloaded by the extension will go in this dir
 DOWNLOAD_DIR = os.path.expanduser("~/Downloads")
@@ -226,7 +232,8 @@ class MeditationLogs:
         entries_to_search = self.buckets[bucket] if bucket else self.all_entries
         entries_found = []
         if date_range:
-            beginning, ending = date_range
+            beginning = datetime.combine(date_range[0], time())
+            ending = datetime.combine(date_range[1], time(23, 59, 59))
             for entry in entries_to_search:
                 entry_date = datetime.utcfromtimestamp(entry['date'] // 1000)
                 if entry.get('notes') and beginning <= entry_date <= ending and regex.search(entry['notes']):
