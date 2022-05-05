@@ -437,6 +437,21 @@ def backup_logs():
         print(f"{latest_log()} ->\n{backup_filename}\n")
 
 
+def count_lung_breathing(ml: MeditationLogs) -> (int, int):
+    """Returns count of lung breathing by finding "Nx lung breath" in notes.
+
+    :return (number of sessions, count)
+    """
+    regex = re.compile(r'(\d+)x', re.DOTALL|re.I)
+    lung_breathing = ml.search_notes(r'lung.*breath')
+    strings_w_counts = []
+    for note in lung_breathing:
+        m = regex.search(note)
+        if m:
+            strings_w_counts.append(m.groups()[0])
+    return len(strings_w_counts), sum(int(s) for s in strings_w_counts)
+
+
 def main():
 
     parser = argparse.ArgumentParser()
@@ -452,6 +467,8 @@ def main():
                         'string parseable by dateutil as a date, or an integer representing days ago.  See ' +
                         'parse_date_range for examples.')
     parser.add_argument('-m', '--memory-stats', action='store_true', help='print memory stats')
+    parser.add_argument('-L', '--lung-breathing', action='store_true',
+                        help='print count of lung breathing/vase breathing')
     args = parser.parse_args()
 
     if args.memory_stats:
@@ -529,6 +546,10 @@ def main():
 
     elif args.list_buckets:
         print(", ".join(ml.buckets.keys()))
+        return
+
+    elif args.lung_breathing:
+        print('Lung Breathing:\nSessions:  Count:\n{:>8}{:>8}'.format(*count_lung_breathing(ml)))
         return
 
     print("Started tracking: May 5, 2019\n")
