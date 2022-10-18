@@ -12,9 +12,8 @@ datetimes:  (Apr 2022) As of now, the meditation log entries have a
     timestamp in the 'date' key, and a string date in the 'dateString' key.
     Recently some entries did not have the 'dateString' key which I was using
     as the datetime for the entry.  The 'dateString' key is a naive datetime
-    that corresponds to the local time of the entry.  To get this datetime
-    from the 'date' timestamp, use
-    datetime.datetime.utcfromtimestamp(entry['date'] // 1000).
+    that corresponds to the local time of the entry.  entry_datetime() gets
+    this from the entry's 'date' key.
     Since the datetimes are naive, this works regardless of the timezone active
     when the meditation session was logged.  See check_datetimes_for_entry()
     for a way to test that this behavior is still intact.
@@ -120,6 +119,10 @@ def format_time(seconds, hours_width=1):
         return "{:d}:{:02d}".format(m, s)
 
 
+def entry_datetime(entry):
+    return datetime.utcfromtimestamp(entry['date'] // 1000)
+
+
 def check_datetimes_for_entry(entry):
     """Utility function - use this to check that the 'date' key and the
     'dateString' key are consistent, or if there is no 'dateString'.
@@ -127,7 +130,7 @@ def check_datetimes_for_entry(entry):
     As of now there are only a handful of entries that don't have a
     'dateString'.
     """
-    timestamp_localtime = datetime.utcfromtimestamp(entry['date'] // 1000)
+    timestamp_localtime = entry_datetime(entry)
     if 'dateString' in entry:
         datestring_localtime = parse_date(entry['dateString'])
         if datestring_localtime == timestamp_localtime:
@@ -137,6 +140,30 @@ def check_datetimes_for_entry(entry):
     else:
         # print(f'no dateString in entry: {entry}')
         print(f'No dateString in entry: id: {entry["id"]}, timestamp: {entry["date"]} {timestamp_localtime =}')
+
+
+def total_duration_seconds(entries):
+    elapsed_list = [e.get("elapsed") for e in entries]
+    return sum(int(x) for x in elapsed_list)
+
+
+def format_log(entry):
+    """Return pretty string of log entry"""
+    course = entry.get("course", {}).get("code", "N/A")
+    try:
+        date_string = entry.get('dateString') or str(entry_datetime(entry))
+        if not date_string:
+            date_string = str(entry_datetime(entry))
+        str_list = [
+            "{:<21}{:>7}{:>14}    {}".format(date_string, format_time(entry.get("elapsed", 0)), course,
+                                             entry.get("id")),
+            "{}".format(entry.get("notes")),
+            ""
+        ]
+    except Exception:
+        print(f"Error with entry: {entry}")
+        raise
+    return '\n'.join(str_list)
 
 
 class MeditationLogs:
@@ -227,8 +254,7 @@ class MeditationLogs:
             beginning = datetime.combine(date_range[0], time())
             ending = datetime.combine(date_range[1], time(23, 59, 59))
             for entry in entries_to_search:
-                entry_date = datetime.utcfromtimestamp(entry['date'] // 1000)
-                if entry.get('notes') and beginning <= entry_date <= ending and regex.search(entry['notes']):
+                if entry.get('notes') and beginning <= entry_datetime(entry) <= ending and regex.search(entry['notes']):
                     entries_found.append(entry)
         else:
             entries_found = [e for e in self.all_entries if e.get("notes") and regex.search(e['notes'])]
@@ -237,33 +263,9 @@ class MeditationLogs:
         return [e.get("notes") for e in entries_found]
 
     @staticmethod
-    def total_duration_seconds(entries):
-        elapsed_list = [e.get("elapsed") for e in entries]
-        return sum(int(x) for x in elapsed_list)
-
-    @staticmethod
     def most_recent(bucket):
         if len(bucket) > 0:
             return bucket[-1]
-
-    @staticmethod
-    def format_log(entry):
-        """Return pretty string of log entry"""
-        course = entry.get("course", {}).get("code", "N/A")
-        try:
-            date_string = entry.get('dateString')
-            if not date_string:
-                date_string = str(datetime.utcfromtimestamp(entry['date'] // 1000))
-            str_list = [
-                "{:<21}{:>7}{:>14}    {}".format(date_string, format_time(entry.get("elapsed", 0)), course,
-                                                 entry.get("id")),
-                "{}".format(entry.get("notes")),
-                ""
-            ]
-        except Exception:
-            print(f"Error with entry: {entry}")
-            raise
-        return '\n'.join(str_list)
 
     # returns (week name, number of entries, total seconds of meditation for that week) for each week
     def jol3_by_week_totals(self):
@@ -271,7 +273,7 @@ class MeditationLogs:
         for week in self.buckets['jol3-by-week']:
             returns.append((week,
                             len(self.buckets['jol3-by-week'][week]),
-                            format_time(MeditationLogs.total_duration_seconds(self.buckets['jol3-by-week'][week]),
+                            format_time(total_duration_seconds(self.buckets['jol3-by-week'][week]),
                                         hours_width=2)))
         return returns
 
@@ -279,7 +281,7 @@ class MeditationLogs:
         header = "JOL 3 Meditation"
         overall = "Total sessions: {}, Total Time: {}".format(
             len(self.buckets["jol3"]),
-            format_time(MeditationLogs.total_duration_seconds(self.buckets["jol3"])))
+            format_time(total_duration_seconds(self.buckets["jol3"])))
         weeks_header = "By Weeks:\n{:6}{:12}{}".format("Week", "Sessions", "Time")
         weeks = "\n".join(["{:>3}{:>8}{:>13}".format(t[0], t[1], t[2]) for t in self.jol3_by_week_totals()])
         return "\n".join((header, overall, weeks_header, weeks))
@@ -289,12 +291,12 @@ class MeditationLogs:
         headers = ["Week", "Sessions", "Total Time"]
         table = self.jol3_by_week_totals()
         table.append(("Total", len(self.buckets["jol3"]),
-                      format_time(MeditationLogs.total_duration_seconds(self.buckets["jol3"]))))
+                      format_time(total_duration_seconds(self.buckets["jol3"]))))
         return f"{title}\n\n{tabulate(table, headers=headers, tablefmt='presto', colalign=('left', 'right', 'right'))}"
 
     def _number_of_sessions_and_duration(self, bucket_name):
         return (len(self.buckets[bucket_name]),
-                format_time(MeditationLogs.total_duration_seconds(self.buckets[bucket_name])))
+                format_time(total_duration_seconds(self.buckets[bucket_name])))
 
     def bardo_courses_table(self):
         """Returns string table"""
@@ -305,7 +307,7 @@ class MeditationLogs:
                  ["ADL", *self._number_of_sessions_and_duration("adl")],
                  ["DOA", *self._number_of_sessions_and_duration("doa")],
                  ["Total", len(self.buckets["ded"] + self.buckets["adl"] + self.buckets["doa"]),
-                  format_time(MeditationLogs.total_duration_seconds(
+                  format_time(total_duration_seconds(
                       self.buckets["ded"] + self.buckets["adl"] + self.buckets["doa"]
                   ))],
                  ]
@@ -319,7 +321,7 @@ class MeditationLogs:
         table = [["NOP", *self._number_of_sessions_and_duration("nop")],
                  ["Not In Any Course", *self._number_of_sessions_and_duration("not-any-course")],
                  ["Overall Meditation", len(self.all_entries),
-                  format_time(MeditationLogs.total_duration_seconds(self.all_entries))]]
+                  format_time(total_duration_seconds(self.all_entries))]]
 
         return f"{title}\n\n{tabulate(table, headers=headers, tablefmt='presto', colalign=('left', 'right', 'right'))}"
 
@@ -334,7 +336,7 @@ class MeditationLogs:
             if section_bucket in self.buckets["fb-sections"] and len(self.buckets["fb-sections"][section_bucket]) > 0:
                 table.append([section,
                               len(self.buckets["fb-sections"][section_bucket]),
-                              format_time(MeditationLogs.total_duration_seconds(
+                              format_time(total_duration_seconds(
                                   self.buckets["fb-sections"][section_bucket]))])
         table.append(["Total", *self._number_of_sessions_and_duration("fully-being-v1")])
 
@@ -375,7 +377,7 @@ class MeditationLogs:
             if section_bucket in self.buckets["fb2-sections"] and len(self.buckets["fb2-sections"][section_bucket]) > 0:
                 table.append([section,
                               len(self.buckets["fb2-sections"][section_bucket]),
-                              format_time(MeditationLogs.total_duration_seconds(
+                              format_time(total_duration_seconds(
                                   self.buckets["fb2-sections"][section_bucket]))])
         table.append(["Total", *self._number_of_sessions_and_duration("fully-being-v2")])
 
@@ -393,10 +395,10 @@ class MeditationLogs:
                     all_pol1_nop_sessions.extend(self.buckets['pol1'][section])
                 table.append([section,
                               len(self.buckets["pol1"][section]),
-                              format_time(MeditationLogs.total_duration_seconds(
+                              format_time(total_duration_seconds(
                                   self.buckets["pol1"][section]))])
         table.append(["Total", len(all_pol1_nop_sessions),
-                      format_time(MeditationLogs.total_duration_seconds(all_pol1_nop_sessions))])
+                      format_time(total_duration_seconds(all_pol1_nop_sessions))])
 
         return f"{title}\n\n{tabulate(table, headers=headers, tablefmt='presto', colalign=('left', 'right', 'right'))}"
 
@@ -517,7 +519,7 @@ def main():
             print("Bucket: {}\n{} logs found\n".format(args.search_bucket, len(logs)))
             print("{:^21}{:7}{:>9}{:>8}\n{}\n".format("Date", "Duration", "Course", "ID", "-" * 50))
             for log in logs:
-                print(MeditationLogs.format_log(log))
+                print(format_log(log))
             total_duration = sum(e.get("elapsed", 0) for e in logs)
             print("Sessions:  Total Duration:\n{:>8}{:>17}".format(len(logs), format_time(total_duration)))
         else:
@@ -535,7 +537,7 @@ def main():
             print("{} logs found\n".format(len(logs)))
             print("{:^21}{:7}{:>14}{:>10}\n{}\n".format("Date", "Duration", "Course", "ID", "-" * 50))
             for log in logs:
-                print(MeditationLogs.format_log(log))
+                print(format_log(log))
             total_duration = sum(e.get("elapsed", 0) for e in logs)
             print("Sessions:  Total Duration:\n{:>8}{:>17}".format(len(logs), format_time(total_duration)))
         else:
