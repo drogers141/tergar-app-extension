@@ -238,6 +238,8 @@ class MeditationLogs:
                 e for e in self.buckets['nop']
                 if e['notes'] and re.search(bucket_regex_dict[section], e['notes'].replace('\n', ' '), re.I)
             ]
+        self.buckets['pol2'] = [e for e in self.buckets['nop']
+                                if e['notes'] and re.search('pol[ _-]*2', e['notes'].replace('\n', ' '), re.I)]
 
     def search_notes(self, regexp, bucket=None, return_full_entries=False, date_range=None):
         """Return notes matching regex search (case insensitive, multiline)
@@ -402,6 +404,12 @@ class MeditationLogs:
 
         return f"{title}\n\n{tabulate(table, headers=headers, tablefmt='presto', colalign=('left', 'right', 'right'))}"
 
+    def pol_2_table(self):
+        title = "POL 2 - NOP"
+        headers = ["Sessions", "Total Time"]
+        table = [[len(self.buckets['pol2']), format_time(total_duration_seconds(self.buckets['pol2']))]]
+        return f"{title}\n\n{tabulate(table, headers=headers, tablefmt='presto')}"
+
 
 def clean_up_old_files():
     """Save 2 most recent meditation log files"""
@@ -560,6 +568,7 @@ def main():
     print(ml.fully_being_v1_table() + "\n")
     print(ml.fully_being_v2_table() + '\n')
     print(ml.path_of_liberation_table() + "\n")
+    print(ml.pol_2_table() + '\n')
     print(ml.general_table() + "\n")
 
 
